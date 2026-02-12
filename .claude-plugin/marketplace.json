@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "layered-flow-chart",
+  "description": "Interactive hierarchical flow diagrams with drill-down navigation",
+  "owner": {
+    "name": "TeXmeijin"
+  },
+  "plugins": [
+    {
+      "name": "layered-flow-chart",
+      "description": "Create, update, and refine interactive hierarchical flow diagrams as single-file HTML with drill-down navigation, vim-style keyboard shortcuts, and network boundary arrows.",
+      "source": "./",
+      "category": "productivity",
+      "tags": ["flow-chart", "diagram", "visualization", "architecture"],
+      "homepage": "https://github.com/TeXmeijin/layered-flow-chart"
+    }
+  ]
+}
