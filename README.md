@@ -2,8 +2,7 @@
 
 A [Claude Code](https://claude.com/claude-code) plugin that creates interactive, hierarchical flow diagrams as single-file HTML with drill-down navigation.
 
-<!-- TODO: Replace with actual demo GIF after recording -->
-<!-- ![Demo](./assets/demo.gif) -->
+![Demo](./assets/demo.gif)
 
 ## Live Demo
 
