@@ -7,7 +7,7 @@ A [Claude Code](https://claude.com/claude-code) plugin that creates interactive,
 
 ## Live Demo
 
-**[View the interactive demo](https://texmeijin.github.io/layered-flow-chart-plugin/)** — a URL Shortener architecture visualized with drill-down layers.
+**[View the interactive demo](https://texmeijin.github.io/layered-flow-chart/)** — a URL Shortener architecture visualized with drill-down layers.
 
 ## Features
 
@@ -24,7 +24,7 @@ A [Claude Code](https://claude.com/claude-code) plugin that creates interactive,
 ### From marketplace (recommended)
 
 ```bash
-claude plugin marketplace add TeXmeijin/layered-flow-chart-plugin
+claude plugin marketplace add TeXmeijin/layered-flow-chart
 claude plugin install layered-flow-chart
 ```
 
@@ -71,7 +71,7 @@ The `examples/` directory contains a sample Next.js URL Shortener app with:
 - In-memory store with aggregation functions
 - User-Agent parser with 40+ browser/OS detection rules
 
-The [live demo](https://texmeijin.github.io/layered-flow-chart-plugin/) is the flow chart generated from this example app.
+The [live demo](https://texmeijin.github.io/layered-flow-chart/) is the flow chart generated from this example app.
 
 ## License
 
