@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>URL Shortener Architecture | Layered Flow Chart</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Hiragino Sans', sans-serif; overflow: hidden; background: #fafbfc; }
+    #root { width: 100vw; height: 100vh; display: flex; flex-direction: column; }
+
+    /* Header */
+    .header {
+      height: 56px; display: flex; align-items: center; padding: 0 24px; gap: 16px;
+      background: white; border-bottom: 1px solid #e5e7eb;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04); z-index: 200; flex-shrink: 0;
+    }
+    .header-logo { font-size: 14px; font-weight: 800; color: #6366f1; letter-spacing: -0.5px; white-space: nowrap; }
+    .breadcrumb { display: flex; align-items: center; gap: 6px; flex-wrap: nowrap; overflow-x: auto; }
+    .breadcrumb-item {
+      font-size: 13px; color: #6b7280; cursor: pointer; padding: 4px 8px;
+      border-radius: 6px; transition: all 0.15s; white-space: nowrap;
+    }
+    .breadcrumb-item:hover { background: #f3f4f6; color: #1f2937; }
+    .breadcrumb-item.active { color: #1f2937; font-weight: 600; cursor: default; }
+    .breadcrumb-item.active:hover { background: transparent; }
+    .breadcrumb-sep { color: #d1d5db; font-size: 12px; }
+    .depth-badge {
+      margin-left: auto; font-size: 11px; padding: 3px 10px; border-radius: 12px;
+      background: #eef2ff; color: #6366f1; font-weight: 600; white-space: nowrap;
+    }
+    .header-gh {
+      display: flex; align-items: center; justify-content: center;
+      width: 30px; height: 30px; border-radius: 6px; color: #9ca3af;
+      transition: all 0.15s; flex-shrink: 0;
+    }
+    .header-gh:hover { color: #4b5563; background: #f3f4f6; }
+    .header-gh svg { width: 18px; height: 18px; }
+
+    /* Layers Container */
+    .layers-container { flex: 1; position: relative; overflow: hidden; }
+
+    /* Layer */
+    .layer {
+      position: absolute;
+      background-color: #fafbfc;
+      background-image: radial-gradient(circle, #e5e7eb 1px, transparent 1px);
+      background-size: 28px 28px;
+      overflow: hidden;
+    }
+    .layer-modal {
+      border-radius: 18px 18px 0 0;
+      box-shadow: 0 -6px 50px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.04);
+      animation: layerUp 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes layerUp {
+      from { transform: translateY(50px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    /* Layer Overlay */
+    .layer-overlay {
+      position: absolute; inset: 0;
+      background: rgba(0,0,0,0.08);
+      cursor: pointer;
+      animation: overlayIn 0.3s ease-out;
+    }
+    @keyframes overlayIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    /* Layer Close Button */
+    .layer-close {
+      position: absolute; top: 16px; right: 20px; z-index: 30;
+      width: 34px; height: 34px; border-radius: 50%; border: none;
+      background: rgba(0,0,0,0.06); font-size: 20px; color: #6b7280;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: all 0.15s; line-height: 1;
+    }
+    .layer-close:hover { background: rgba(0,0,0,0.12); color: #1f2937; transform: scale(1.05); }
+
+    /* Canvas */
+    .canvas { width: 100%; height: 100%; position: relative; }
+
+    /* Level Header */
+    .level-header {
+      position: absolute; top: 20px; left: 50%; transform: translateX(-50%);
+      text-align: center; z-index: 10; pointer-events: none;
+    }
+    .level-title { font-size: 18px; font-weight: 700; color: #1f2937; margin-bottom: 4px; }
+    .level-desc { font-size: 12px; color: #9ca3af; }
+
+    /* SVG Connections */
+    .connections-svg {
+      position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+      pointer-events: none; z-index: 1;
+    }
+    .conn-path { fill: none; stroke: #cbd5e1; stroke-width: 2; }
+    .conn-path.dashed { stroke-dasharray: 8 5; stroke: #f59e0b; }
+    .conn-path.boundary { stroke: #6366f1; stroke-width: 3; }
+    .conn-label {
+      font-size: 10px; fill: #94a3b8; font-weight: 500;
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+    .conn-label.warn { fill: #f59e0b; }
+    .conn-label.boundary { fill: #6366f1; font-weight: 700; }
+
+    /* Nodes */
+    .node {
+      position: absolute; width: 220px; z-index: 5;
+      transform: translate(-50%, -50%) scale(0.85);
+      opacity: 0;
+      transition: opacity 0.4s ease-out, box-shadow 0.2s, border-color 0.2s;
+      cursor: pointer; user-select: none;
+    }
+    .node.visible {
+      opacity: 1;
+      transform: translate(-50%, -50%) scale(1);
+    }
+    .node:hover { z-index: 20; }
+    .node-card {
+      background: white; border-radius: 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.07), 0 0 0 1px rgba(0,0,0,0.04);
+      overflow: hidden;
+      transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .node:hover .node-card {
+      box-shadow: 0 12px 32px rgba(0,0,0,0.12), 0 0 0 1px rgba(0,0,0,0.06);
+      transform: translateY(-3px);
+    }
+    .node.drillable:hover .node-card { box-shadow: 0 12px 32px rgba(0,0,0,0.14), 0 0 0 2px var(--nc); }
+    .node.focused .node-card {
+      box-shadow: 0 12px 32px rgba(0,0,0,0.12), 0 0 0 3px #6366f1;
+      transform: translateY(-3px);
+    }
+    .node.focused.drillable .node-card { box-shadow: 0 12px 32px rgba(0,0,0,0.14), 0 0 0 3px var(--nc); }
+    .kbd-hint {
+      font-size: 10px; color: #9ca3af; white-space: nowrap;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .kbd { font-size: 9px; padding: 1px 5px; border-radius: 3px; background: #f3f4f6; color: #6b7280; font-family: 'SF Mono', Menlo, monospace; font-weight: 600; }
+    .node-accent { height: 5px; }
+    .node-body { padding: 12px 14px 10px; }
+    .node-icon-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .node-icon { font-size: 22px; line-height: 1; }
+    .node-title { font-size: 13px; font-weight: 700; color: #1f2937; line-height: 1.3; }
+    .node-desc { font-size: 11px; color: #6b7280; line-height: 1.45; margin-bottom: 6px; }
+    .node-techs { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 5px; }
+    .tech-badge {
+      font-size: 9px; padding: 1px 6px; border-radius: 4px;
+      background: #f3f4f6; color: #4b5563; font-weight: 500;
+    }
+    .node-file {
+      font-size: 9px; color: #b0b8c4; font-family: 'SF Mono', Menlo, monospace;
+      overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .node-drill {
+      margin-top: 8px; padding-top: 7px; border-top: 1px solid #f3f4f6;
+      font-size: 10px; font-weight: 600; display: flex; align-items: center; gap: 4px;
+    }
+    .drill-dot {
+      width: 6px; height: 6px; border-radius: 50%;
+      animation: pulseDot 2s ease-in-out infinite;
+    }
+    @keyframes pulseDot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.8); }
+    }
+
+    /* Annotation node */
+    .node.annotation .node-card {
+      background: #fffbeb; border: 1px dashed #fbbf24; cursor: default;
+    }
+    .node.annotation:hover .node-card { transform: none; box-shadow: 0 2px 8px rgba(0,0,0,0.07); }
+
+    /* Detail Popover */
+    .popover-overlay { position: fixed; inset: 0; z-index: 500; }
+    .detail-popover {
+      position: fixed; width: 300px; z-index: 510;
+      background: white; border-radius: 14px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05);
+      padding: 20px; animation: popIn 0.2s ease-out;
+    }
+    @keyframes popIn { from { opacity: 0; transform: scale(0.95) translateY(4px); } to { opacity: 1; } }
+    .popover-close {
+      position: absolute; top: 10px; right: 12px; background: none; border: none;
+      font-size: 18px; color: #9ca3af; cursor: pointer; line-height: 1;
+    }
+    .popover-close:hover { color: #4b5563; }
+    .popover-title { font-size: 15px; font-weight: 700; color: #1f2937; margin-bottom: 4px; }
+    .popover-desc { font-size: 12px; color: #6b7280; line-height: 1.5; margin-bottom: 12px; }
+    .popover-section { margin-bottom: 10px; }
+    .popover-section-title { font-size: 10px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .popover-io {
+      font-size: 11px; color: #374151; background: #f9fafb; padding: 6px 10px;
+      border-radius: 6px; margin-bottom: 4px; display: flex; gap: 6px;
+    }
+    .popover-io-label { font-weight: 700; color: #6366f1; min-width: 42px; }
+    .popover-details { list-style: none; padding: 0; }
+    .popover-details li {
+      font-size: 11px; color: #4b5563; padding: 3px 0; padding-left: 14px;
+      position: relative; line-height: 1.4;
+    }
+    .popover-details li::before { content: ''; position: absolute; left: 0; top: 9px; width: 5px; height: 5px; border-radius: 50%; background: #d1d5db; }
+    .popover-file {
+      font-size: 10px; color: #94a3b8; font-family: 'SF Mono', Menlo, monospace;
+      background: #f3f4f6; padding: 4px 8px; border-radius: 4px; margin-top: 8px;
+      word-break: break-all;
+    }
+    .popover-footer { display: flex; justify-content: flex-end; margin-top: 10px; }
+    .popover-copy {
+      display: flex; align-items: center; gap: 4px;
+      background: none; border: none; cursor: pointer;
+      font-size: 10px; color: #c0c5cc; padding: 2px 6px; border-radius: 4px;
+      transition: all 0.15s; font-family: inherit;
+    }
+    .popover-copy:hover { color: #6b7280; background: #f3f4f6; }
+    .popover-copy svg { width: 13px; height: 13px; }
+    .popover-copy.copied { color: #10b981; }
+
+    /* Copy toast */
+    .copy-toast {
+      position: fixed; z-index: 600; pointer-events: none;
+      display: flex; align-items: center; gap: 5px;
+      background: #1f2937; color: #fff; font-size: 11px; font-weight: 600;
+      padding: 5px 12px; border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+      animation: toastPop 1s ease-out forwards;
+    }
+    .copy-toast svg { width: 14px; height: 14px; stroke: #34d399; }
+    @keyframes toastPop {
+      0% { opacity: 0; transform: translateY(4px) scale(0.95); }
+      15% { opacity: 1; transform: translateY(0) scale(1); }
+      70% { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-4px); }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+
+  <script src="https://unpkg.com/umd-react/dist/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/umd-react/dist/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <script type="text/babel">
+    const { useState, useEffect, useRef, useLayoutEffect, useCallback, memo } = React;
+
+    /* ====================================================================
+       DATA SECTION - Replace this LEVELS object with your own flow data.
+       See SKILL.md for the data schema and guidelines.
+       ==================================================================== */
+    const LEVELS = {
+      root: {
+        title: 'URL Shortener Architecture',
+        description: 'Next.js App Router — click nodes to drill down',
+        nodes: [
+          { id: 'frontend', title: 'Frontend\n(React)', description: 'Home page & Analytics page', icon: '🖥', color: '#3B82F6', x: 12, y: 50, techs: ['React', 'Next.js'], file: 'src/app/page.tsx', hasChildren: true },
+          { id: 'api-links', title: 'API Route\n/api/links', description: 'Create & list short URLs', icon: '🔗', color: '#8B5CF6', x: 37, y: 30, techs: ['Next.js'], file: 'src/app/api/links/route.ts', hasChildren: true },
+          { id: 'api-redirect', title: 'API Route\n/api/r/[slug]', description: 'Redirect & record click analytics', icon: '↗', color: '#EF4444', x: 37, y: 70, techs: ['Next.js'], file: 'src/app/api/r/[slug]/route.ts', hasChildren: true },
+          { id: 'api-analytics', title: 'API Route\n/api/analytics', description: 'Aggregated click statistics', icon: '📊', color: '#F59E0B', x: 62, y: 30, techs: ['Next.js'], file: 'src/app/api/analytics/[slug]/route.ts', hasChildren: false, input: 'slug param', output: 'AnalyticsSummary', details: ['Timeline (hourly buckets)', 'Top referrers (top 10)', 'Device / Browser / OS breakdown'] },
+          { id: 'store', title: 'In-Memory\nStore', description: 'Maps for links & clicks', icon: '💾', color: '#10B981', x: 88, y: 50, techs: ['TypeScript'], file: 'src/lib/store.ts', hasChildren: true },
+          { id: 'note-boundary', title: 'Network boundary', description: 'Indigo arrows = HTTP fetch across client/server boundary', icon: '📌', color: '#F59E0B', x: 24, y: 50, annotation: true },
+        ],
+        connections: [
+          { from: 'frontend', to: 'api-links', boundary: true, label: 'fetch' },
+          { from: 'frontend', to: 'api-redirect', boundary: true, label: 'navigate' },
+          { from: 'frontend', to: 'api-analytics', boundary: true, label: 'fetch' },
+          { from: 'api-links', to: 'store' },
+          { from: 'api-redirect', to: 'store' },
+          { from: 'api-analytics', to: 'store' },
+        ]
+      },
+
+      'frontend': {
+        title: 'Frontend Layer',
+        description: 'React components with client-side state management',
+        nodes: [
+          { id: 'fe-home', title: 'Home Page', description: 'URL input form + link list', icon: '🏠', color: '#3B82F6', x: 15, y: 35, techs: ['React', 'useState'], file: 'src/app/page.tsx:56', hasChildren: false, input: 'User types URL', output: 'Short URL displayed', details: ['Form with URL input', 'POST /api/links on submit', 'Shows created short URL', 'Auto-refreshes link list'] },
+          { id: 'fe-linklist', title: 'Link List', description: 'All created URLs with click counts', icon: '📋', color: '#3B82F6', x: 50, y: 35, techs: ['React', 'useEffect'], file: 'src/app/page.tsx:64', hasChildren: false, input: 'GET /api/links response', output: 'Rendered card grid', details: ['fetchLinks() on mount', 'Shows slug, original URL, click count', 'Links to analytics page'] },
+          { id: 'fe-analytics', title: 'Analytics Page', description: 'Per-link click analytics dashboard', icon: '📊', color: '#F59E0B', x: 85, y: 35, techs: ['React', 'useEffect'], file: 'src/app/analytics/[slug]/page.tsx:82', hasChildren: false, input: 'slug from URL params', output: 'Charts & tables', details: ['5s auto-refresh interval', 'Hourly timeline bar chart', 'Top referrers table', 'Device/Browser/OS breakdown'] },
+          { id: 'fe-layout', title: 'Root Layout', description: 'Shared header & metadata', icon: '📐', color: '#94A3B8', x: 50, y: 75, techs: ['Next.js'], file: 'src/app/layout.tsx', hasChildren: false, details: ['Metadata: title, description', 'Shared header with nav', 'Wraps all pages'] },
+        ],
+        connections: [
+          { from: 'fe-home', to: 'fe-linklist', label: 'refreshes' },
+          { from: 'fe-linklist', to: 'fe-analytics', label: 'navigate' },
+        ]
+      },
+
+      'api-links': {
+        title: 'POST /api/links — Create Short URL',
+        description: 'Validation → slug generation → storage pipeline',
+        nodes: [
+          { id: 'al-parse', title: 'Parse Request', description: 'Extract URL from JSON body', icon: '1', color: '#8B5CF6', x: 10, y: 50, techs: ['Next.js'], file: 'src/app/api/links/route.ts:19', hasChildren: false, input: '{ url: string }', output: 'body.url' },
+          { id: 'al-validate', title: 'Validate URL', description: 'Format, protocol & hostname checks', icon: '2', color: '#8B5CF6', x: 28, y: 50, techs: ['TypeScript'], file: 'src/lib/validators.ts:18', hasChildren: false, input: 'raw URL string', output: '{ valid, error? }', details: ['Empty string check', 'Max 2048 chars', 'new URL() syntax parse', 'http/https only', 'Hostname must contain "."'] },
+          { id: 'al-slug', title: 'Generate Slug', description: 'crypto.randomBytes → 6-char slug', icon: '3', color: '#8B5CF6', x: 46, y: 50, techs: ['crypto'], file: 'src/lib/slug.ts:23', hasChildren: false, input: 'length (default 6)', output: '"abc123"', details: ['randomBytes(length)', 'Map to 62-char alphabet', 'a-z, A-Z, 0-9'] },
+          { id: 'al-dedup', title: 'Dedup Check', description: 'Retry if slug already exists (max 10)', icon: '4', color: '#8B5CF6', x: 64, y: 50, techs: ['TypeScript'], file: 'src/app/api/links/route.ts:39', hasChildren: false, input: 'slug', output: 'unique slug', details: ['while loop max 10 attempts', 'slugExists() check', 'Regenerate if collision'] },
+          { id: 'al-store', title: 'Create Link', description: 'Store link + init empty clicks array', icon: '5', color: '#10B981', x: 82, y: 50, techs: ['TypeScript'], file: 'src/lib/store.ts:72', hasChildren: false, input: 'slug, originalUrl', output: 'Link object', details: ['links.set(slug, link)', 'clicks.set(slug, [])'] },
+          { id: 'al-error', title: '400 Error', description: 'Return validation error', icon: '⚠', color: '#EF4444', x: 28, y: 82, hasChildren: false, details: ['Invalid URL format', 'Missing protocol', 'Bad hostname'] },
+        ],
+        connections: [
+          { from: 'al-parse', to: 'al-validate' },
+          { from: 'al-validate', to: 'al-slug' },
+          { from: 'al-slug', to: 'al-dedup' },
+          { from: 'al-dedup', to: 'al-store' },
+          { from: 'al-validate', to: 'al-error', dashed: true, label: 'invalid' },
+        ]
+      },
+
+      'api-redirect': {
+        title: 'GET /api/r/[slug] — Redirect Flow',
+        description: 'Lookup → analytics recording → 302 redirect',
+        nodes: [
+          { id: 'ar-lookup', title: 'Lookup Slug', description: 'Find original URL in store', icon: '1', color: '#EF4444', x: 12, y: 40, techs: ['TypeScript'], file: 'src/app/api/r/[slug]/route.ts:19', hasChildren: false, input: 'slug from URL param', output: 'Link | undefined' },
+          { id: 'ar-ua', title: 'Parse User-Agent', description: 'Extract browser, OS, device type', icon: '2', color: '#EF4444', x: 35, y: 40, techs: ['TypeScript'], file: 'src/lib/ua-parser.ts:23', hasChildren: false, input: 'User-Agent header', output: 'ParsedUA', details: ['detectBrowser(): 44-step chain', 'detectBrowserVersion(): regex map', 'detectOS(): 15+ patterns', 'detectDeviceType(): mobile/desktop/tablet'] },
+          { id: 'ar-headers', title: 'Extract Headers', description: 'Referrer & IP from request', icon: '3', color: '#EF4444', x: 58, y: 40, techs: ['Next.js'], file: 'src/app/api/r/[slug]/route.ts:33', hasChildren: false, input: 'Request headers', output: 'referrer, ip', details: ['Referer header', 'X-Forwarded-For (comma split)', 'X-Real-IP fallback', 'Default: "unknown"'] },
+          { id: 'ar-record', title: 'Record Click', description: 'Push click data to store', icon: '4', color: '#10B981', x: 81, y: 40, techs: ['TypeScript'], file: 'src/lib/store.ts:106', hasChildren: false, input: 'slug + Click object', output: 'void', details: ['timestamp', 'browser + version', 'OS', 'deviceType', 'referrer', 'IP'] },
+          { id: 'ar-redirect', title: '302 Redirect', description: 'Navigate to original URL', icon: '↗', color: '#14B8A6', x: 81, y: 72, techs: ['Next.js'], file: 'src/app/api/r/[slug]/route.ts:53', hasChildren: false, output: 'Location: originalUrl' },
+          { id: 'ar-404', title: '404 Not Found', description: 'Slug does not exist', icon: '⚠', color: '#EF4444', x: 12, y: 72, hasChildren: false },
+        ],
+        connections: [
+          { from: 'ar-lookup', to: 'ar-ua' },
+          { from: 'ar-ua', to: 'ar-headers' },
+          { from: 'ar-headers', to: 'ar-record' },
+          { from: 'ar-record', to: 'ar-redirect' },
+          { from: 'ar-lookup', to: 'ar-404', dashed: true, label: 'not found' },
+        ]
+      },
+
+      'store': {
+        title: 'In-Memory Store',
+        description: 'Map-based data layer with aggregation functions',
+        nodes: [
+          { id: 'st-links', title: 'Links Map', description: 'Map<slug, Link>', icon: '🗂', color: '#10B981', x: 20, y: 30, techs: ['TypeScript'], file: 'src/lib/store.ts:66', hasChildren: false, details: ['createLink()', 'getLink()', 'getAllLinks()', 'slugExists()'] },
+          { id: 'st-clicks', title: 'Clicks Map', description: 'Map<slug, Click[]>', icon: '📊', color: '#10B981', x: 20, y: 70, techs: ['TypeScript'], file: 'src/lib/store.ts:67', hasChildren: false, details: ['recordClick()', 'getClicks()'] },
+          { id: 'st-timeline', title: 'Build Timeline', description: 'Group clicks by hour', icon: '⏱', color: '#F59E0B', x: 55, y: 22, techs: ['TypeScript'], file: 'src/lib/store.ts:138', hasChildren: false, input: 'Click[]', output: 'TimelineEntry[]', details: ['Bucket by hour (ISO string)', 'Sort ascending'] },
+          { id: 'st-referrers', title: 'Build Referrers', description: 'Top 10 referrer domains', icon: '🌐', color: '#F59E0B', x: 55, y: 44, techs: ['TypeScript'], file: 'src/lib/store.ts:159', hasChildren: false, input: 'Click[]', output: 'ReferrerStat[]', details: ['Count per referrer', 'Sort desc', 'Slice top 10'] },
+          { id: 'st-device', title: 'Build Device\nStats', description: 'Mobile / Desktop / Tablet', icon: '📱', color: '#F59E0B', x: 55, y: 66, techs: ['TypeScript'], file: 'src/lib/store.ts:175', hasChildren: false, input: 'Click[]', output: 'DeviceStat[]' },
+          { id: 'st-browser', title: 'Build Browser\nStats', description: 'Chrome, Firefox, Safari...', icon: '🌍', color: '#F59E0B', x: 85, y: 33, techs: ['TypeScript'], file: 'src/lib/store.ts:191', hasChildren: false, input: 'Click[]', output: 'BrowserStat[]' },
+          { id: 'st-os', title: 'Build OS\nStats', description: 'Windows, macOS, Linux...', icon: '💻', color: '#F59E0B', x: 85, y: 66, techs: ['TypeScript'], file: 'src/lib/store.ts:207', hasChildren: false, input: 'Click[]', output: 'OsStat[]' },
+          { id: 'st-summary', title: 'getAnalytics()', description: 'Orchestrates all aggregations', icon: '📈', color: '#8B5CF6', x: 85, y: 50, techs: ['TypeScript'], file: 'src/lib/store.ts:119', hasChildren: false, input: 'slug', output: 'AnalyticsSummary' },
+        ],
+        connections: [
+          { from: 'st-links', to: 'st-summary' },
+          { from: 'st-clicks', to: 'st-timeline' },
+          { from: 'st-clicks', to: 'st-referrers' },
+          { from: 'st-clicks', to: 'st-device' },
+          { from: 'st-timeline', to: 'st-summary' },
+          { from: 'st-referrers', to: 'st-summary' },
+          { from: 'st-device', to: 'st-summary' },
+          { from: 'st-browser', to: 'st-summary' },
+          { from: 'st-os', to: 'st-summary' },
+        ]
+      },
+    };
+
+    const HEADER_LOGO = 'URL Shortener';
+    /* ==================================================================== */
+
+    /* Helpers */
+    function getCenter(rect, cr) {
+      return { x: rect.left + rect.width / 2 - cr.left, y: rect.top + rect.height / 2 - cr.top };
+    }
+    function calcPath(fromRect, toRect, cr) {
+      const fc = getCenter(fromRect, cr), tc = getCenter(toRect, cr);
+      const dx = tc.x - fc.x, dy = tc.y - fc.y;
+      let fx, fy, tx, ty;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        fx = dx > 0 ? fromRect.right - cr.left : fromRect.left - cr.left;
+        fy = fc.y;
+        tx = dx > 0 ? toRect.left - cr.left : toRect.right - cr.left;
+        ty = tc.y;
+        const mx = (fx + tx) / 2;
+        return { d: `M ${fx} ${fy} C ${mx} ${fy}, ${mx} ${ty}, ${tx} ${ty}`, mx: (fx+tx)/2, my: (fy+ty)/2 };
+      } else {
+        fx = fc.x;
+        fy = dy > 0 ? fromRect.bottom - cr.top : fromRect.top - cr.top;
+        tx = tc.x;
+        ty = dy > 0 ? toRect.top - cr.top : toRect.bottom - cr.top;
+        const my = (fy + ty) / 2;
+        return { d: `M ${fx} ${fy} C ${fx} ${my}, ${tx} ${my}, ${tx} ${ty}`, mx: (fx+tx)/2, my: (fy+ty)/2 };
+      }
+    }
+
+    /* Node to Markdown */
+    function nodeToMarkdown(node) {
+      const lines = [`## ${node.icon} ${node.title}`, '', node.description];
+      if (node.input || node.output) {
+        lines.push('', '### Input / Output');
+        if (node.input) lines.push(`- **IN:** ${node.input}`);
+        if (node.output) lines.push(`- **OUT:** ${node.output}`);
+      }
+      if (node.details && node.details.length > 0) {
+        lines.push('', '### Details');
+        node.details.forEach(d => lines.push(`- ${d}`));
+      }
+      if (node.techs && node.techs.length > 0) {
+        lines.push('', `**Tech:** ${node.techs.join(', ')}`);
+      }
+      if (node.file) lines.push('', `\`${node.file}\``);
+      return lines.join('\n');
+    }
+
+    /* Spatial navigation helper */
+    function findNearest(nodes, currentIdx, direction) {
+      const current = nodes[currentIdx];
+      let bestIdx = null, bestScore = Infinity;
+      for (let i = 0; i < nodes.length; i++) {
+        if (i === currentIdx) continue;
+        const dx = nodes[i].x - current.x, dy = nodes[i].y - current.y;
+        let ok = false, primary, secondary;
+        if (direction === 'left')  { ok = dx < -1; primary = -dx; secondary = Math.abs(dy); }
+        if (direction === 'right') { ok = dx > 1;  primary = dx;  secondary = Math.abs(dy); }
+        if (direction === 'up')    { ok = dy < -1; primary = -dy; secondary = Math.abs(dx); }
+        if (direction === 'down')  { ok = dy > 1;  primary = dy;  secondary = Math.abs(dx); }
+        if (!ok) continue;
+        const score = primary + secondary * 0.3;
+        if (score < bestScore) { bestScore = score; bestIdx = i; }
+      }
+      return bestIdx;
+    }
+
+    /* Components */
+    function Connections({ containerRef, nodeRefs, connections, levelId }) {
+      const [paths, setPaths] = useState([]);
+      const calc = useCallback(() => {
+        const c = containerRef.current;
+        if (!c) return;
+        const cr = c.getBoundingClientRect();
+        const p = connections.map(conn => {
+          const fe = nodeRefs.current[conn.from], te = nodeRefs.current[conn.to];
+          if (!fe || !te) return null;
+          const { d, mx, my } = calcPath(fe.getBoundingClientRect(), te.getBoundingClientRect(), cr);
+          return { id: `${conn.from}-${conn.to}`, d, mx, my, dashed: conn.dashed, boundary: conn.boundary, label: conn.label };
+        }).filter(Boolean);
+        setPaths(p);
+      }, [connections, containerRef, nodeRefs]);
+
+      useLayoutEffect(() => { const t = requestAnimationFrame(calc); return () => cancelAnimationFrame(t); }, [levelId, calc]);
+      useEffect(() => {
+        const ro = new ResizeObserver(calc);
+        if (containerRef.current) ro.observe(containerRef.current);
+        window.addEventListener('resize', calc);
+        return () => { ro.disconnect(); window.removeEventListener('resize', calc); };
+      }, [calc, containerRef]);
+      useEffect(() => {
+        const t1 = setTimeout(calc, 600);
+        const t2 = setTimeout(calc, 1000);
+        return () => { clearTimeout(t1); clearTimeout(t2); };
+      }, [levelId, calc]);
+
+      return (
+        <svg className="connections-svg">
+          <defs>
+            <marker id={`ah-${levelId}`} viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#cbd5e1" />
+            </marker>
+            <marker id={`ahw-${levelId}`} viewBox="0 0 10 10" refX="10" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#f59e0b" />
+            </marker>
+            <marker id={`ahb-${levelId}`} viewBox="0 0 10 10" refX="10" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+              <path d="M 0 1 L 10 5 L 0 9 z" fill="#6366f1" />
+            </marker>
+          </defs>
+          {paths.map(p => {
+            const cls = p.boundary ? 'boundary' : p.dashed ? 'dashed' : '';
+            const marker = p.boundary ? `url(#ahb-${levelId})` : p.dashed ? `url(#ahw-${levelId})` : `url(#ah-${levelId})`;
+            return (
+              <g key={p.id}>
+                <path className={`conn-path${cls ? ` ${cls}` : ''}`} d={p.d} markerEnd={marker} />
+                {p.label && <text className={`conn-label${cls ? ` ${cls}` : ''}`} x={p.mx} y={p.my - 8} textAnchor="middle">{p.label}</text>}
+              </g>
+            );
+          })}
+        </svg>
+      );
+    }
+
+    function NodeCard({ node, onClick, delay, nodeRef, focused }) {
+      const [visible, setVisible] = useState(false);
+      useEffect(() => { const t = setTimeout(() => setVisible(true), delay); return () => clearTimeout(t); }, [delay]);
+      const isAnnotation = node.annotation;
+      return (
+        <div
+          ref={nodeRef}
+          className={`node${visible ? ' visible' : ''}${node.hasChildren ? ' drillable' : ''}${isAnnotation ? ' annotation' : ''}${focused ? ' focused' : ''}`}
+          style={{ left: `${node.x}%`, top: `${node.y}%`, '--nc': node.color, transitionDelay: `${delay}ms` }}
+          onClick={() => !isAnnotation && onClick(node)}
+        >
+          <div className="node-card">
+            <div className="node-accent" style={{ background: node.color }} />
+            <div className="node-body">
+              <div className="node-icon-row">
+                <span className="node-icon">{node.icon}</span>
+                <span className="node-title" style={{ whiteSpace: 'pre-line' }}>{node.title}</span>
+              </div>
+              <div className="node-desc">{node.description}</div>
+              {node.techs && node.techs.length > 0 && (
+                <div className="node-techs">
+                  {node.techs.map(t => <span key={t} className="tech-badge">{t}</span>)}
+                </div>
+              )}
+              {node.file && <div className="node-file">{node.file}</div>}
+              {node.hasChildren && (
+                <div className="node-drill" style={{ color: node.color }}>
+                  <span className="drill-dot" style={{ background: node.color }} />
+                  Details
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    function DetailPopover({ node, anchorRect, onClose, copied, onCopy }) {
+      const popRef = useRef(null);
+      const [pos, setPos] = useState({ x: 0, y: 0 });
+      useLayoutEffect(() => {
+        if (!anchorRect || !popRef.current) return;
+        const pw = 300, ph = popRef.current.offsetHeight;
+        let x = anchorRect.right + 12;
+        let y = anchorRect.top + anchorRect.height / 2 - ph / 2;
+        if (x + pw > window.innerWidth) x = anchorRect.left - pw - 12;
+        if (y < 8) y = 8;
+        if (y + ph > window.innerHeight - 8) y = window.innerHeight - 8 - ph;
+        setPos({ x, y });
+      }, [anchorRect]);
+
+      const copyIcon = copied
+        ? <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        : <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>;
+
+      return (
+        <>
+          <div className="popover-overlay" onClick={onClose} />
+          <div ref={popRef} className="detail-popover" style={{ left: pos.x, top: pos.y }}>
+            <button className="popover-close" onClick={onClose}>&times;</button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ fontSize: 24 }}>{node.icon}</span>
+              <span className="popover-title">{node.title}</span>
+            </div>
+            <div className="popover-desc">{node.description}</div>
+            {(node.input || node.output) && (
+              <div className="popover-section">
+                <div className="popover-section-title">Input / Output</div>
+                {node.input && <div className="popover-io"><span className="popover-io-label">IN</span>{node.input}</div>}
+                {node.output && <div className="popover-io"><span className="popover-io-label">OUT</span>{node.output}</div>}
+              </div>
+            )}
+            {node.details && node.details.length > 0 && (
+              <div className="popover-section">
+                <div className="popover-section-title">Details</div>
+                <ul className="popover-details">
+                  {node.details.map((d, i) => <li key={i}>{d}</li>)}
+                </ul>
+              </div>
+            )}
+            {node.techs && node.techs.length > 0 && (
+              <div className="popover-section">
+                <div className="popover-section-title">Tech Stack</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                  {node.techs.map(t => <span key={t} className="tech-badge">{t}</span>)}
+                </div>
+              </div>
+            )}
+            {node.file && <div className="popover-file">{node.file}</div>}
+            <div className="popover-footer">
+              <button className={`popover-copy${copied ? ' copied' : ''}`} onClick={onCopy}>
+                {copyIcon}{copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+          </div>
+        </>
+      );
+    }
+
+    /* CanvasLayer: self-contained canvas with its own refs */
+    const CanvasLayer = memo(function CanvasLayer({ levelId, isTop, onDrillDown, onNodeClick, focusedIdx }) {
+      const containerRef = useRef(null);
+      const nodeRefs = useRef({});
+      const level = LEVELS[levelId];
+      const navigableNodes = level.nodes.filter(n => !n.annotation);
+      const focusedNodeId = isTop && focusedIdx !== null && navigableNodes[focusedIdx] ? navigableNodes[focusedIdx].id : null;
+
+      const handleClick = useCallback((node) => {
+        if (!isTop) return;
+        if (node.hasChildren && LEVELS[node.id]) {
+          onDrillDown(node);
+        } else {
+          const el = nodeRefs.current[node.id];
+          if (el) onNodeClick(node, el.getBoundingClientRect());
+        }
+      }, [isTop, onDrillDown, onNodeClick]);
+
+      return (
+        <div ref={containerRef} className="canvas">
+          <div className="level-header">
+            <div className="level-title">{level.title}</div>
+            {level.description && <div className="level-desc">{level.description}</div>}
+          </div>
+          <Connections
+            containerRef={containerRef}
+            nodeRefs={nodeRefs}
+            connections={level.connections}
+            levelId={levelId}
+          />
+          {level.nodes.map((node, i) => (
+            <NodeCard
+              key={node.id}
+              node={node}
+              onClick={handleClick}
+              delay={80 + i * 60}
+              focused={node.id === focusedNodeId}
+              nodeRef={el => { if (el) nodeRefs.current[node.id] = el; }}
+            />
+          ))}
+        </div>
+      );
+    });
+
+    /* Main App */
+    function App() {
+      const [navStack, setNavStack] = useState([{ id: 'root', title: 'Overview' }]);
+      const [popover, setPopover] = useState(null);
+      const [focusedIdx, setFocusedIdx] = useState(null);
+      const [copied, setCopied] = useState(false);
+      const [copyToast, setCopyToast] = useState(null);
+      const copyToastTimer = useRef(null);
+      const focusedIdxRef = useRef(null);
+      useEffect(() => { focusedIdxRef.current = focusedIdx; }, [focusedIdx]);
+
+      const doCopy = useCallback((node) => {
+        navigator.clipboard.writeText(nodeToMarkdown(node));
+        if (popover) {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        } else {
+          const el = document.querySelector('.node.focused');
+          if (el) {
+            const r = el.getBoundingClientRect();
+            setCopyToast({ x: r.right + 8, y: r.top });
+          }
+          clearTimeout(copyToastTimer.current);
+          copyToastTimer.current = setTimeout(() => setCopyToast(null), 1000);
+        }
+      }, [popover]);
+
+      const drillDown = useCallback((node) => {
+        setPopover(null);
+        setFocusedIdx(null);
+        setNavStack(prev => [...prev, { id: node.id, title: node.title }]);
+      }, []);
+
+      const closeToDepth = useCallback((targetDepth) => {
+        setPopover(null);
+        setFocusedIdx(null);
+        setNavStack(prev => prev.slice(0, targetDepth + 1));
+      }, []);
+
+      const handleNodeClick = useCallback((node, rect) => {
+        setPopover({ node, rect });
+      }, []);
+
+      useEffect(() => {
+        const handler = (e) => {
+          if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+          const topId = navStack[navStack.length - 1].id;
+          const nav = LEVELS[topId].nodes.filter(n => !n.annotation);
+          if ('hjkl'.includes(e.key)) {
+            e.preventDefault();
+            setPopover(null);
+            if (nav.length === 0) return;
+            setFocusedIdx(prev => {
+              if (e.key === 'j') return prev === null ? 0 : Math.min(prev + 1, nav.length - 1);
+              if (e.key === 'k') return prev === null ? nav.length - 1 : Math.max(prev - 1, 0);
+              if (prev === null) return e.key === 'l' ? 0 : nav.length - 1;
+              const found = findNearest(nav, prev, e.key === 'l' ? 'right' : 'left');
+              return found !== null ? found : prev;
+            });
+          } else if (e.key === 'o' || e.key === 'Enter') {
+            e.preventDefault();
+            const curr = focusedIdxRef.current;
+            if (popover || curr === null || !nav[curr]) return;
+            const node = nav[curr];
+            if (node.hasChildren && LEVELS[node.id]) {
+              drillDown(node);
+            } else {
+              const el = document.querySelector('.node.focused');
+              if (el) handleNodeClick(node, el.getBoundingClientRect());
+            }
+          } else if (e.key === 'y') {
+            e.preventDefault();
+            const target = popover ? popover.node : (focusedIdxRef.current !== null && nav[focusedIdxRef.current]) ? nav[focusedIdxRef.current] : null;
+            if (target) doCopy(target);
+          } else if (e.key === 'q' || e.key === 'Escape') {
+            e.preventDefault();
+            if (popover) {
+              setPopover(null);
+            } else if (navStack.length > 1) {
+              closeToDepth(navStack.length - 2);
+            } else {
+              setFocusedIdx(null);
+            }
+          }
+        };
+        window.addEventListener('keydown', handler);
+        return () => window.removeEventListener('keydown', handler);
+      }, [navStack, popover, drillDown, closeToDepth, handleNodeClick, doCopy]);
+
+      const depth = navStack.length - 1;
+
+      return (
+        <>
+          <div className="header">
+            <div className="header-logo">{HEADER_LOGO}</div>
+            <div className="breadcrumb">
+              {navStack.map((item, i) => (
+                <React.Fragment key={i}>
+                  {i > 0 && <span className="breadcrumb-sep">/</span>}
+                  <span
+                    className={`breadcrumb-item${i === navStack.length - 1 ? ' active' : ''}`}
+                    onClick={() => closeToDepth(i)}
+                  >
+                    {item.title}
+                  </span>
+                </React.Fragment>
+              ))}
+            </div>
+            <div className="kbd-hint">
+              <span className="kbd">h</span><span className="kbd">j</span><span className="kbd">k</span><span className="kbd">l</span> navigate
+              <span className="kbd">o</span> open
+              <span className="kbd">y</span> copy
+              <span className="kbd">q</span> close
+            </div>
+            <div className="depth-badge">Layer {depth}</div>
+            <a className="header-gh" href="https://github.com/TeXmeijin/layered-flow-chart-plugin" target="_blank" rel="noopener noreferrer" title="GitHub">
+              <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+            </a>
+          </div>
+
+          <div className="layers-container">
+            {navStack.map((item, d) => {
+              const isBase = d === 0;
+              const isTop = d === navStack.length - 1;
+              const shrinkPct = d * 3;
+              const vOffset = d * 18;
+              return (
+                <React.Fragment key={`${item.id}-${d}`}>
+                  <div
+                    className={`layer${!isBase ? ' layer-modal' : ''}`}
+                    style={{
+                      zIndex: d * 2 + 1,
+                      width: `${100 - shrinkPct * 2}%`,
+                      height: `calc(100% - ${vOffset}px)`,
+                      top: `${vOffset}px`,
+                      left: `${shrinkPct}%`,
+                    }}
+                  >
+                    {!isBase && (
+                      <button className="layer-close" onClick={() => closeToDepth(d - 1)}>&times;</button>
+                    )}
+                    <CanvasLayer
+                      levelId={item.id}
+                      isTop={isTop}
+                      onDrillDown={drillDown}
+                      onNodeClick={handleNodeClick}
+                      focusedIdx={isTop ? focusedIdx : null}
+                    />
+                  </div>
+                  {!isTop && (
+                    <div
+                      className="layer-overlay"
+                      style={{
+                        zIndex: d * 2 + 2,
+                        borderRadius: !isBase ? '18px 18px 0 0' : '0',
+                        width: `${100 - shrinkPct * 2}%`,
+                        height: `calc(100% - ${vOffset}px)`,
+                        top: `${vOffset}px`,
+                        left: `${shrinkPct}%`,
+                      }}
+                      onClick={() => closeToDepth(d)}
+                    />
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+
+          {popover && (
+            <DetailPopover
+              node={popover.node}
+              anchorRect={popover.rect}
+              onClose={() => setPopover(null)}
+              copied={copied}
+              onCopy={() => doCopy(popover.node)}
+            />
+          )}
+
+          {copyToast && (
+            <div key={Date.now()} className="copy-toast" style={{ left: copyToast.x, top: copyToast.y }}>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Copied
+            </div>
+          )}
+        </>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+  </script>
+</body>
+</html>

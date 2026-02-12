@@ -1,0 +1,8 @@
+{
+  "name": "layered-flow-chart",
+  "description": "Create, update, and refine interactive hierarchical flow diagrams with drill-down navigation",
+  "version": "0.0.1",
+  "author": {
+    "name": "TeXmeijin"
+  }
+}
