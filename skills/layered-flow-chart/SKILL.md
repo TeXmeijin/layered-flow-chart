@@ -165,14 +165,34 @@ Requirements:
 - Aim for 5-10 nodes per level. If the investigation found fewer, that's fine, but do not drop discovered steps
 ```
 
+### Phase 2.5: Ask Output Location (Main Agent — AskUserQuestion)
+
+Before assembling the HTML, **use AskUserQuestion** to ask the user where to place the generated file.
+
+Determine the "main file path" from the Phase 1 investigation (the entry point or key file identified in Step 1-1). Use its parent directory as the option 2 suggestion.
+
+**AskUserQuestion config:**
+- header: "Output path"
+- question: "フローチャートHTMLの出力先を選んでください。"
+- options:
+  1. **`/tmp` 配下 (Recommended)** — `/tmp/{project}/flow-{name}.html` に出力します。プロジェクトを汚しません。
+  2. **メインファイルと同じフォルダ** — `{detected main file's directory}/flow-{name}.html` に出力します。READMEの代わりなどプロジェクト内に置きたい場合に。
+  3. **パスを指定する** — 任意のパスを入力できます。
+
+Use the user's choice to determine the output path for the next phase.
+
+- Option 1 → `/tmp/{project}/flow-{name}.html` (create dir with `mkdir -p` if needed)
+- Option 2 → `{main file's directory}/flow-{name}.html`
+- Option 3 (Other) → Use the path the user provides as-is
+
 ### Phase 3: Assembly (Main Agent)
 
 You (the main agent) handle the final assembly:
 
-1. **Copy template** from `~/.claude/skills/layered-flow-chart/assets/template.html` to `/tmp/{project}/flow-{name}.html`
+1. **Copy template** from `~/.claude/skills/layered-flow-chart/assets/template.html` to the output path determined in Phase 2.5
 2. **Replace the `LEVELS` object, `HEADER_LOGO`** with Phase 2 output
 3. **Replace the `<title>` tag** text
-4. **Open in browser**: `open /tmp/{project}/flow-{name}.html`
+4. **Open in browser**: `open {output path}`
 5. **Verify** with screenshots at each layer depth - click through every drill-down level
 
 ---
