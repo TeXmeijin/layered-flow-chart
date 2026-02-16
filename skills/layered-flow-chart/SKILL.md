@@ -21,14 +21,14 @@ Create, update, and refine interactive hierarchical flow diagrams from a single 
 
 Before starting, determine which mode applies:
 
-| Mode | Trigger | Existing HTML? | Code investigation? |
-|------|---------|---------------|-------------------|
+| Mode | Trigger | Existing data.js? | Code investigation? |
+|------|---------|-------------------|-------------------|
 | **Create** | "Make a flow diagram of X" | No | Full (3-phase pipeline) |
 | **Update** | "Update the flow to reflect latest code" | Yes | Targeted (diff-focused) |
 | **Refine** | "Improve the layout / add details / add boundary arrows" | Yes | None or minimal |
 
 **How to determine the mode:**
-1. Check if user references an existing flow chart HTML file → if yes, **Update** or **Refine**
+1. Check if user references an existing flow chart (directory with `index.html` + `data.js`) → if yes, **Update** or **Refine**
 2. If user mentions code changes, new features, or syncing → **Update**
 3. If user mentions layout, visuals, detail level, or adding properties like `boundary` → **Refine**
 4. Otherwise → **Create**
@@ -151,10 +151,10 @@ Convert the following investigation report into a LEVELS JavaScript object for a
 ## Schema Rules
 {paste the "Data Schema", "Node Positioning Guide", "Connection Path Collision Prevention", and "Color Palette Suggestions" sections from this SKILL.md}
 
-Output ONLY the JavaScript code block:
+Output ONLY the JavaScript for data.js:
 - const LEVELS = { ... };
 - const HEADER_LOGO = '...';
-- const TITLE = '...';
+- document.title = '... | Layered Flow Chart';
 
 Requirements:
 - Follow the Node Positioning Guide strictly - space nodes to avoid overlap
@@ -173,26 +173,26 @@ Determine the "main file path" from the Phase 1 investigation (the entry point o
 
 **AskUserQuestion config:**
 - header: "Output path"
-- question: "フローチャートHTMLの出力先を選んでください。"
+- question: "フローチャートの出力先ディレクトリを選んでください。"
 - options:
-  1. **`/tmp` 配下 (Recommended)** — `/tmp/{project}/flow-{name}.html` に出力します。プロジェクトを汚しません。
-  2. **メインファイルと同じフォルダ** — `{detected main file's directory}/flow-{name}.html` に出力します。READMEの代わりなどプロジェクト内に置きたい場合に。
-  3. **パスを指定する** — 任意のパスを入力できます。
+  1. **`/tmp` 配下 (Recommended)** — `/tmp/{project}/flow-{name}/` に出力します。プロジェクトを汚しません。
+  2. **メインファイルと同じフォルダ** — `{detected main file's directory}/flow-{name}/` に出力します。READMEの代わりなどプロジェクト内に置きたい場合に。
+  3. **パスを指定する** — 任意のディレクトリパスを入力できます。
 
-Use the user's choice to determine the output path for the next phase.
+Use the user's choice to determine the output directory for the next phase.
 
-- Option 1 → `/tmp/{project}/flow-{name}.html` (create dir with `mkdir -p` if needed)
-- Option 2 → `{main file's directory}/flow-{name}.html`
+- Option 1 → `/tmp/{project}/flow-{name}/` (create dir with `mkdir -p` if needed)
+- Option 2 → `{main file's directory}/flow-{name}/`
 - Option 3 (Other) → Use the path the user provides as-is
 
 ### Phase 3: Assembly (Main Agent)
 
-You (the main agent) handle the final assembly:
+You (the main agent) handle the final assembly. The template and data are separate files — **the LLM only generates `data.js`**, no HTML generation needed.
 
-1. **Copy template** from `~/.claude/skills/layered-flow-chart/assets/template.html` to the output path determined in Phase 2.5
-2. **Replace the `LEVELS` object, `HEADER_LOGO`** with Phase 2 output
-3. **Replace the `<title>` tag** text
-4. **Open in browser**: `open {output path}`
+1. **Create output directory**: `mkdir -p {output-dir}`
+2. **Copy template**: `cp ~/.claude/skills/layered-flow-chart/assets/template.html {output-dir}/index.html` (zero LLM generation)
+3. **Write data.js**: Write Phase 2 output to `{output-dir}/data.js` (this is the only LLM-generated file)
+4. **Open in browser**: `open {output-dir}/index.html`
 5. **Verify** with screenshots at each layer depth - click through every drill-down level
 
 ---
@@ -203,7 +203,7 @@ Use when an existing flow chart HTML needs to reflect code changes (new features
 
 ### Step 0: Extract Current State
 
-1. **Read the existing HTML file** to extract the current `LEVELS` object
+1. **Read the existing `data.js` file** (in the same directory as the flow chart's `index.html`) to extract the current `LEVELS` object
 2. Parse it to understand: which nodes exist, their hierarchy, connections, and metadata
 
 ### Step 1: Targeted Investigation (Explore)
@@ -240,7 +240,7 @@ Based on the diff report:
 
 ### Step 3: Write and Verify
 
-1. **Edit the existing HTML file** in-place (replace LEVELS object only)
+1. **Edit the existing `data.js` file** in-place (update LEVELS/HEADER_LOGO/document.title only — do not touch `index.html`)
 2. **Open in browser** and verify all layers
 
 ---
@@ -275,7 +275,7 @@ Child Layer (the drill-down of the target, if any)
 
 ### Step 0: Read and Scope the Blast Radius
 
-1. **Read the existing HTML file** to extract the current `LEVELS` object
+1. **Read the existing `data.js` file** to extract the current `LEVELS` object
 2. Identify the **target node** the user wants to refine
 3. Identify the **impact zone** — all layers/nodes that may need revision:
    - The level containing the target (parent layer)
@@ -327,7 +327,7 @@ For each layer in the impact zone:
 
 ### Step 3: Write and Verify
 
-1. **Edit the existing HTML file** in-place (modify LEVELS object only)
+1. **Edit the existing `data.js` file** in-place (modify LEVELS/HEADER_LOGO/document.title only — do not touch `index.html`)
 2. **Open in browser** and verify **every layer in the impact zone**, not just the target
 
 ---
@@ -434,7 +434,7 @@ Bezier curves are auto-drawn between nodes. Before finalizing positions, **menta
 
 ## Key Implementation Notes
 
-- **Do NOT modify CSS or React component code** in the template - only replace the DATA SECTION
+- **Do NOT modify `index.html`** (the template) — only generate/edit `data.js`
 - Each `CanvasLayer` manages its own `nodeRefs` - do not add `useEffect` that clears refs
 - SVG marker IDs are scoped per level (`ah-${levelId}`) to avoid conflicts
 - Connection arrows recalculate on resize + dual timeouts (600ms, 1000ms) for animation sync
