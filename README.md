@@ -1,3 +1,5 @@
+[English](README.md) | [日本語](README.ja.md)
+
 # Layered Flow Chart
 
 A [Claude Code](https://claude.com/claude-code) plugin that creates interactive, hierarchical flow diagrams as single-file HTML with drill-down navigation.
