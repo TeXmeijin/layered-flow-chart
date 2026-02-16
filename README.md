@@ -2,18 +2,20 @@
 
 # Layered Flow Chart
 
-A [Claude Code](https://claude.com/claude-code) plugin that creates interactive, hierarchical flow diagrams as single-file HTML with drill-down navigation.
+A [Claude Code](https://claude.com/claude-code) plugin that helps humans understand large codebases fast.
+
+Claude generates an interactive single-file HTML that displays an abstract processing flow as Layer 0. Click any module to deep dive into progressively concrete layers. Unlike traditional UML tools like Mermaid that can only represent a single level of detail, readers can freely navigate between abstraction levels. The output is plain HTML/JS, so it works directly with Git. No more drowning in AI-generated code you can't follow.
 
 ![Demo](./assets/demo.gif)
 
 ## Live Demo
 
-**[View the interactive demo](https://texmeijin.github.io/layered-flow-chart/)** — a URL Shortener architecture visualized with drill-down layers.
+**[View the interactive demo](https://texmeijin.github.io/layered-flow-chart/)** — a URL Shortener architecture visualized with hierarchical layers.
 
 ## Features
 
 - FigJam/Miro-like interactive flow chart in a single HTML file
-- Click nodes to drill down into deeper detail layers (stacking modals)
+- Click nodes to deep dive into detail layers (stacking modals)
 - Vim-style keyboard navigation: `h` `j` `k` `l` navigate, `o` open, `y` yank (copy), `q` close
 - Network boundary arrows (indigo) to distinguish cross-process connections
 - Copy node content as Markdown with `y` key or click the copy button
